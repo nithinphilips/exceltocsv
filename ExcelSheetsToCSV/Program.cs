@@ -7,6 +7,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.ComponentModel;
+using NDesk.Options;
 
 namespace ExcelSheetsToCSV
 {
@@ -14,17 +15,70 @@ namespace ExcelSheetsToCSV
     {
         static int Main(string[] args)
         {
-            if (args.Length != 1)
+            // the options to be set via command-line
+            bool help = false;
+            string outputType = "csv";
+            XlFileFormat format = XlFileFormat.xlCSVWindows;
+
+            // the command-line options
+            var p = new OptionSet()
+            {
+                { "t|type=", v => outputType = v},
+                { "h|help", v => help = v  != null},
+            };
+
+            // the parse commandline options and get any arguments
+            List<string> files = p.Parse(args);
+
+            switch (outputType.ToLower())
+            {
+                case "csv":
+                    format = XlFileFormat.xlCSVWindows;
+                    break;
+                case "tab":
+                    format = XlFileFormat.xlTextWindows;
+                    break;
+                default:
+                    if (!Enum.TryParse(outputType, out format))
+                    {
+                        Console.WriteLine("I did not recognize the output format you specified. Try again.");
+                        return 0;
+                    }
+                    break;
+            }
+
+
+            // User need help or omitted required argument?
+            if (help || files.Count <= 0)
             {
                 Console.WriteLine("Excel Sheets to CSV Converter");
                 Console.WriteLine();
                 Console.WriteLine("Usage:");
-                Console.WriteLine("\texcelsheetstocsv.exe <excel-file>");
+                Console.WriteLine("\texcelsheetstocsv.exe --help | ([--type=csv|tab]  <excel-file> [<excel-file> ...])");
                 return 0;
             }
 
-            string excelFile = new FileInfo(args[0]).FullName;
+            // Transform each file
+            foreach (var file in files)
+            {
+                var fi = new FileInfo(file);
+                if (fi.Exists)
+                {
+                    TransformSpreadSheet(fi.FullName, format);
+                }
+                else
+                {
+                    Console.Error.WriteLine("An input file you specified, '{0}', does not exist", fi.Name);
+                }
+            }
+            
 
+            // done!
+            return 0;
+        }
+
+        static void TransformSpreadSheet(string excelFile, XlFileFormat format)
+        {
             Console.WriteLine("Reading {0}...", excelFile);
 
             Microsoft.Office.Interop.Excel.Application xlApp = new Microsoft.Office.Interop.Excel.Application();
@@ -48,14 +102,12 @@ namespace ExcelSheetsToCSV
 
                     File.Delete(csvFileName);
                 }
-                sheet.SaveAs(csvFileName, XlFileFormat.xlCSVWindows);
+                sheet.SaveAs(csvFileName, format);
             }
 
             int hwnd = xlApp.Application.Hwnd;
             xlApp.Quit();
             Helper.TryKillProcessByMainWindowHwnd(hwnd);
-
-            return 0;
         }
 
     }
